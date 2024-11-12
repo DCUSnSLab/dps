@@ -4,22 +4,136 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kubernetes Pod Manager</title>
+    <script>
+        // GPU 체크박스 상태에 따라 드롭다운 활성화/비활성화
+        function toggleGpuDropdown() {
+            const useGpuCheckbox = document.getElementById("use_gpu");
+            const gpuDropdown = document.getElementById("gpu_selection");
+            gpuDropdown.disabled = !useGpuCheckbox.checked;
+        }
+
+        // Create Pod 비동기 요청
+        async function createPod(event) {
+            event.preventDefault(); // 폼 제출로 인한 페이지 리로드 방지
+
+            const formData = new FormData(document.getElementById("podForm"));
+            const response = await fetch("/create_pod", {
+                method: "POST",
+                body: formData,
+            });
+
+            const result = await response.json();
+            alert(result.message);
+
+            // Pod 목록 업데이트
+            updatePodList();
+        }
+
+        async function updatePodList() {
+	    console.log("updatePodList()");
+            const namespace = document.getElementById("namespace").value;
+
+            try {
+                const response = await fetch(`/list_pods/${namespace}`);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch Pod list: ${response.status}`);
+                }
+
+                const pods = await response.json();
+                const podList = document.getElementById("pod-list");
+                podList.innerHTML = "";
+
+                pods.forEach((pod) => {
+                    const li = document.createElement("li");
+                    li.textContent = `${pod.name} - Status: ${pod.status} - CPU Requests: ${pod.cpu_requests}, CPU Limits: ${pod.cpu_limits}, Memory Requests: ${pod.memory_requests}, Memory Limits: ${pod.memory_limits}, GPU Requests: ${pod.gpu_requests}`;
+
+                    // 삭제 버튼 추가
+                    const deleteButton = document.createElement("button");
+                    deleteButton.textContent = "Delete";
+                    deleteButton.onclick = () => deletePod(pod.name);
+
+                    li.appendChild(deleteButton);
+                    podList.appendChild(li);
+                });
+            } catch (error) {
+                console.error("Error updating Pod list:", error);
+                alert("Failed to update Pod list. Please check the console for more details.");
+            }
+        }
+
+        // Pod 삭제 요청
+        async function deletePod(podName) {
+            const namespace = document.getElementById("namespace").value;
+
+            try {
+                const response = await fetch(`/delete_pod/${namespace}/${podName}`, {
+                    method: "POST",
+                });
+
+                const result = await response.json();
+                alert(result.message);
+                updatePodList();
+            } catch (error) {
+                console.error("Error deleting Pod:", error);
+                alert("Failed to delete Pod. Please check the console for more details.");
+            }
+        }
+
+        async function updateImageDropdowns() {
+	    console.log("updateImageDropdowns()");
+            try {
+                const response = await fetch("/get_images");
+                const imageData = await response.json();
+
+		console.log(imageData);
+
+                const imageDropdown = document.getElementById("images");
+
+                // 드롭다운 메뉴 초기화
+                imageDropdown.innerHTML = "";
+
+                // Ubuntu 이미지 목록 업데이트
+                imageData.forEach((image) => {
+                    const option = document.createElement("option");
+                    option.value = image;
+                    option.textContent = image;
+                    imageDropdown.appendChild(option);
+                });
+            } catch (error) {
+                console.error("Error updating image dropdowns:", error);
+                alert("Failed to update image dropdowns.");
+            }
+        }
+
+	window.onload = function () {
+            // 페이지 로드 시 이미지 목록 초기화
+            // 페이지 로드 시 Pod 목록 초기화
+	    updatePodList();
+	    updateImageDropdowns();
+	};
+
+
+	console.log("Test");
+    </script>
 </head>
 <body>
     <h1>Kubernetes Pod Manager</h1>
 
     <!-- Pod 생성 폼 -->
-    <form action="/create_pod" method="post">
+    <form id="podForm" onsubmit="createPod(event)">
         <h2>Create a New Pod</h2>
         <label for="pod_name">Pod Name:</label>
         <input type="text" id="pod_name" name="pod_name" required><br><br>
 
         <label for="namespace">Namespace:</label>
-        <select id="namespace" name="namespace">
+        <select id="namespace" name="namespace" onchange="updatePodList()">
             {% for ns in namespaces %}
                 <option value="{{ ns }}" {% if ns == 'k8s-api-junehong' %}selected{% endif %}>{{ ns }}</option>
             {% endfor %}
         </select><br><br>
+
+        <label for="images">Select Image:</label>
+        <select id="images" name="image"></select><br><br>
 
         <label for="cpu_request">CPU Request:</label>
         <select id="cpu_request" name="cpu_request">
@@ -44,25 +158,24 @@
             <option value="5Gi">5Gi</option>
         </select><br><br>
 
-        <label for="gpu_request">GPU Request:</label>
-        <select id="gpu_request" name="gpu_request">
-            <option value="0">None</option>
-            <option value="1">1 GPU</option>
+        <!-- GPU 사용 여부 체크박스 -->
+        <label for="use_gpu">Use GPU:</label>
+        <input type="checkbox" id="use_gpu" name="use_gpu" onclick="toggleGpuDropdown()"><br><br>
+
+        <!-- GPU 선택 드롭다운 -->
+        <label for="gpu_selection">Select GPU:</label>
+        <select id="gpu_selection" name="gpu_selection" disabled>
+            <option value="">-- Select GPU --</option>
+            {% for gpu in gpus %}
+                <option value="{{ gpu.uuid }}">{{ gpu.name }} ({{ gpu.available_gpus }} available)</option>
+            {% endfor %}
         </select><br><br>
 
         <button type="submit">Create Pod</button>
     </form>
 
     <h2>Existing Pods</h2>
-    <ul>
-        {% for pod in pods %}
-            <li>
-                {{ pod.name }} - Status: {{ pod.status }}
-                <form action="/delete_pod/{{ pod.name }}" method="post" style="display:inline;">
-                    <button type="submit">Delete</button>
-                </form>
-            </li>
-        {% endfor %}
-    </ul>
+    <ul id="pod-list"></ul>
 </body>
 </html>
+
