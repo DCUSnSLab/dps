@@ -24,21 +24,32 @@ def get_namespaces():
 
 # Pod 생성 함수
 def create_pod(pod_name, namespace, cpu_request, memory_request, volume_size, gpu_request):
+    # Pod 이름에서 밑줄(`_`)을 하이픈(`-`)으로 변경
+    pod_name = pod_name.replace("_", "-")
+
     # 메타데이터 설정
     metadata = client.V1ObjectMeta(name=pod_name)
 
-    # 리소스 요청 설정
+    # 리소스 요청 및 제한 설정
     resource_requests = {
         "cpu": cpu_request,
         "memory": memory_request
     }
+    resource_limits = {
+        "cpu": cpu_request,
+        "memory": memory_request
+    }
 
-    # GPU 요청이 있는 경우 리소스 요청에 추가
+    # GPU 요청이 있는 경우 리소스 요청 및 제한에 추가
     if gpu_request and int(gpu_request) > 0:
         resource_requests["nvidia.com/gpu"] = gpu_request
+        resource_limits["nvidia.com/gpu"] = gpu_request
 
-    # 리소스 요청 정의
-    resources = client.V1ResourceRequirements(requests=resource_requests)
+    # 리소스 정의
+    resources = client.V1ResourceRequirements(
+        requests=resource_requests,
+        limits=resource_limits
+    )
 
     # 컨테이너 정의
     container = client.V1Container(
@@ -54,7 +65,7 @@ def create_pod(pod_name, namespace, cpu_request, memory_request, volume_size, gp
         empty_dir=client.V1EmptyDirVolumeSource(size_limit=volume_size)
     )
 
-    # 볼륨 마운트 설정 (mount_path 사용)
+    # 볼륨 마운트 설정
     volume_mount = client.V1VolumeMount(
         name="example-volume",
         mount_path="/usr/share/nginx/html"
