@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-web-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: k8s-web-app
+  template:
+    metadata:
+      labels:
+        app: k8s-web-app
+    spec:
+      containers:
+        - name: web-app
+          image: junhp1234/dps:0.2
+          ports:
+            - containerPort: 5000
+          env:
+            - name: KUBECONFIG
+              value: "/root/.kube/config"
+          volumeMounts:
+            - name: kubeconfig
+              mountPath: "/root/.kube"
+              readOnly: true
+      volumes:
+        - name: kubeconfig
+          secret:
+            secretName: kubeconfig-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: k8s-web-app-service
+spec:
+  type: NodePort
+  ports:
+    - port: 5000
+      targetPort: 5000
+      nodePort: 30000
+  selector:
+    app: k8s-web-app
