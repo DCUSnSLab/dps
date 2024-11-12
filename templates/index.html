@@ -4,44 +4,44 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kubernetes Pod Manager</title>
-    <script>
-        function updatePods() {
-            const namespace = document.getElementById("namespace").value;
-            fetch(`/list_pods/${namespace}`)
-                .then(response => response.json())
-                .then(data => {
-                    const podList = document.getElementById("pod-list");
-                    podList.innerHTML = "";
-                    data.forEach(pod => {
-                        const li = document.createElement("li");
-                        li.innerHTML = `${pod.name} - Status: ${pod.status} <button onclick="deletePod('${namespace}', '${pod.name}')">Delete</button>`;
-                        podList.appendChild(li);
-                    });
-                });
-        }
-
-        function deletePod(namespace, podName) {
-            fetch(`/delete_pod/${namespace}/${podName}`, { method: "POST" })
-                .then(response => response.json())
-                .then(data => {
-                    alert(data.message);
-                    updatePods();
-                });
-        }
-
-        setInterval(updatePods, 10000);
-    </script>
 </head>
 <body>
     <h1>Kubernetes Pod Manager</h1>
 
+    <!-- Pod 생성 폼 -->
     <form action="/create_pod" method="post">
         <h2>Create a New Pod</h2>
+        <label for="pod_name">Pod Name:</label>
+        <input type="text" id="pod_name" name="pod_name" required><br><br>
+
         <label for="namespace">Namespace:</label>
         <select id="namespace" name="namespace">
             {% for ns in namespaces %}
-                <option value="{{ ns }}" {% if ns == current_namespace %}selected{% endif %}>{{ ns }}</option>
+                <option value="{{ ns }}" {% if ns == 'k8s-api-junehong' %}selected{% endif %}>{{ ns }}</option>
             {% endfor %}
+        </select><br><br>
+
+        <label for="cpu_request">CPU Request:</label>
+        <select id="cpu_request" name="cpu_request">
+            <option value="100m">100m</option>
+            <option value="200m">200m</option>
+            <option value="500m">500m</option>
+            <option value="1">1</option>
+        </select><br><br>
+
+        <label for="memory_request">Memory Request:</label>
+        <select id="memory_request" name="memory_request">
+            <option value="128Mi">128Mi</option>
+            <option value="256Mi">256Mi</option>
+            <option value="512Mi">512Mi</option>
+            <option value="1Gi">1Gi</option>
+        </select><br><br>
+
+        <label for="volume_size">Volume Size:</label>
+        <select id="volume_size" name="volume_size">
+            <option value="1Gi">1Gi</option>
+            <option value="2Gi">2Gi</option>
+            <option value="5Gi">5Gi</option>
         </select><br><br>
 
         <label for="gpu_request">GPU Request:</label>
@@ -54,6 +54,15 @@
     </form>
 
     <h2>Existing Pods</h2>
-    <ul id="pod-list"></ul>
+    <ul>
+        {% for pod in pods %}
+            <li>
+                {{ pod.name }} - Status: {{ pod.status }}
+                <form action="/delete_pod/{{ pod.name }}" method="post" style="display:inline;">
+                    <button type="submit">Delete</button>
+                </form>
+            </li>
+        {% endfor %}
+    </ul>
 </body>
 </html>
