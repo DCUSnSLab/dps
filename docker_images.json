@@ -2,5 +2,6 @@
         "ubuntu:22.04",
         "ubuntu:20.04",
         "ubuntu:18.04",
-        "ubuntu:16.04"
+        "ubuntu:16.04",
+	"junhp1234/vnc-20.04-with-cuda11.2.2"
 ]
