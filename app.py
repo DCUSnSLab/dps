@@ -96,7 +96,7 @@ class KubernetesManager:
             print(f"Failed to retrieve GPU information: {e}")
             return []
 
-    def create_pod(self, pod_name, namespace, image, cpu_request, memory_request, volume_size, use_gpu):
+    def create_pod(self, pod_name, namespace, image, cpu_request, memory_request, volume_size, use_gpu, create_service, serviceport):
         pod_name = pod_name.replace("_", "-")
         metadata = client.V1ObjectMeta(name=pod_name)
 
@@ -116,9 +116,24 @@ class KubernetesManager:
 
         try:
             self.v1.create_namespaced_pod(namespace=namespace, body=pod)
+            if create_service:
+                self.create_service(pod_name, namespace)
             return f"Pod '{pod_name}' created successfully in namespace '{namespace}'."
         except ApiException as e:
             return f"Failed to create Pod: {e}"
+
+    def create_service(self, pod_name, namespace):
+        service_metadata = client.V1ObjectMeta(name=pod_name)
+        spec = client.V1ServiceSpec(
+            selector={"name": pod_name},
+            ports=[client.V1ServicePort(protocol="TCP", port=80, target_port=80)]
+        )
+        service = client.V1Service(api_version="v1", kind="Service", metadata=service_metadata, spec=spec)
+        try:
+            self.v1.create_namespaced_service(namespace=namespace, body=service)
+            return f"Service '{pod_name}' created successfully."
+        except ApiException as e:
+            return f"Failed to create Service: {e}"
 
     def delete_pod(self, namespace, pod_name):
         try:
@@ -159,11 +174,21 @@ class FlaskApp:
         @self.app.route("/create_pod", methods=["POST"])
         def create_pod_route():
             data = request.form
+            create_service = "create_service" in data  # 체크박스가 체크되었는지 확인
+            service_port = data.get("service_port", 80)  # 기본값 80 설정
+
             message = self.k8s_manager.create_pod(
-                data.get("pod_name"), data.get("namespace"), data.get("image"),
-                data.get("cpu_request"), data.get("memory_request"),
-                data.get("volume_size"), data.get("use_gpu") == "on"
+                data.get("pod_name"),
+                data.get("namespace"),
+                data.get("image"),
+                data.get("cpu_request"),
+                data.get("memory_request"),
+                data.get("volume_size"),
+                data.get("use_gpu") == "on",
+                create_service,
+                service_port
             )
+
             return jsonify({"message": message})
 
     def run(self):
