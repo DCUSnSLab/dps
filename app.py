@@ -96,7 +96,7 @@ class KubernetesManager:
             print(f"Failed to retrieve GPU information: {e}")
             return []
 
-    def create_pod(self, pod_name, namespace, image, cpu_request, memory_request, volume_size, use_gpu, create_service, serviceport):
+    def create_pod(self, pod_name, namespace, image, cpu_request, memory_request, volume_size, use_gpu, create_service, service_type, serviceport):
         pod_name = pod_name.replace("_", "-")
         metadata = client.V1ObjectMeta(name=pod_name)
 
@@ -117,17 +117,25 @@ class KubernetesManager:
         try:
             self.v1.create_namespaced_pod(namespace=namespace, body=pod)
             if create_service:
-                self.create_service(pod_name, namespace)
+                self.create_service(pod_name, namespace, service_type, serviceport)
             return f"Pod '{pod_name}' created successfully in namespace '{namespace}'."
         except ApiException as e:
             return f"Failed to create Pod: {e}"
 
-    def create_service(self, pod_name, namespace):
+    def create_service(self, pod_name, namespace, service_type, serviceport):
         service_metadata = client.V1ObjectMeta(name=pod_name)
+
+        #print(serviceport)
+        #print(type(serviceport))
+
+        # if service_type == "NodePort":
+
         spec = client.V1ServiceSpec(
             selector={"name": pod_name},
-            ports=[client.V1ServicePort(protocol="TCP", port=80, target_port=80)]
+            ports=[client.V1ServicePort(protocol="TCP", port=80, target_port=int(serviceport), node_port=0)],
+            type=service_type
         )
+
         service = client.V1Service(api_version="v1", kind="Service", metadata=service_metadata, spec=spec)
         try:
             self.v1.create_namespaced_service(namespace=namespace, body=service)
@@ -138,7 +146,11 @@ class KubernetesManager:
     def delete_pod(self, namespace, pod_name):
         try:
             self.v1.delete_namespaced_pod(name=pod_name, namespace=namespace)
-            return f"Pod '{pod_name}' deleted successfully."
+            services = self.v1.list_namespaced_service(namespace=namespace)
+            for service in services.items:
+                if service.metadata.name == pod_name:
+                    self.v1.delete_namespaced_service(name=pod_name, namespace=namespace)
+            return f"Pod '{pod_name}' and its associated services deleted successfully."
         except ApiException as e:
             return f"Failed to delete Pod: {e}"
 
@@ -186,6 +198,7 @@ class FlaskApp:
                 data.get("volume_size"),
                 data.get("use_gpu") == "on",
                 create_service,
+                data.get("service_type"),
                 service_port
             )
 
