@@ -32,6 +32,18 @@ def get_image_list():
         print(f"Failed to load image list: {e}")
         return {}
 
+def convert_memory_to_mib(memory_str):
+    if memory_str.endswith("Gi"):  # 기가바이트 → 메가바이트 변환
+        return int(float(memory_str.replace("Gi", "")) * 1024)
+    elif memory_str.endswith("Mi"):  # 그대로 메가바이트
+        return int(memory_str.replace("Mi", ""))
+    elif memory_str.endswith("Ki"):  # 킬로바이트 → 메가바이트 변환
+        return int(float(memory_str.replace("Ki", "")) / 1024)
+    elif memory_str.isdigit():  # 숫자만 있으면 그대로 반환
+        return int(memory_str)
+    else:
+        return 0  # 알 수 없는 형식이면 0으로 처리
+
 def list_pods(namespace):
     try:
         pods = v1.list_namespaced_pod(namespace=namespace)
@@ -52,8 +64,10 @@ def list_pods(namespace):
                 # CPU, 메모리, GPU 정보 추출
                 cpu_requests += float(requests.get("cpu", "0").replace("m", "")) / 1000
                 cpu_limits += float(limits.get("cpu", "0").replace("m", "")) / 1000
-                memory_requests += int(requests.get("memory", "0").replace("Mi", "")) / 1024
-                memory_limits += int(limits.get("memory", "0").replace("Mi", "")) / 1024
+
+                memory_requests += convert_memory_to_mib(requests.get("memory", "0"))
+                memory_limits += convert_memory_to_mib(limits.get("memory", "0"))
+
                 gpu_requests += int(requests.get("nvidia.com/gpu", "0"))
 
             pod_list.append({
@@ -61,8 +75,8 @@ def list_pods(namespace):
                 "status": pod.status.phase,
                 "cpu_requests": f"{cpu_requests:.2f} cores",
                 "cpu_limits": f"{cpu_limits:.2f} cores",
-                "memory_requests": f"{memory_requests:.2f} Gi",
-                "memory_limits": f"{memory_limits:.2f} Gi",
+                "memory_requests": f"{memory_requests:.2f} Mi",
+                "memory_limits": f"{memory_limits:.2f} Mi",
                 "gpu_requests": gpu_requests
             })
         return pod_list
