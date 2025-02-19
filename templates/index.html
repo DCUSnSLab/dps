@@ -12,11 +12,59 @@
             gpuDropdown.disabled = !useGpuCheckbox.checked;
         }
 
+        function toggleServiceSettings() {
+            document.getElementById("service_settings").style.display = document.getElementById("create_service").checked ? "block" : "none";
+        }
+
+        function addService() {
+            const serviceList = document.getElementById("service_list");
+            const serviceCount = serviceList.children.length;
+
+            const div = document.createElement("div");
+            div.innerHTML = `
+                <fieldset>
+                    <legend>Service ${serviceCount + 1}</legend>
+                    <label>Service Type:</label>
+                    <select name="service_type_${serviceCount}">
+                        <option value="ClusterIP">ClusterIP</option>
+                        <option value="NodePort">NodePort</option>
+                        <option value="LoadBalancer">LoadBalancer</option>
+                    </select><br>
+
+                    <label>Target Port:</label>
+                    <input type="number" name="target_port_${serviceCount}" value="80"><br>
+
+                    <label>Service Port:</label>
+                    <input type="number" name="service_port_${serviceCount}" value="0"><br>
+
+                    <button type="button" onclick="removeService(this)">Remove</button>
+                </fieldset>
+            `;
+            serviceList.appendChild(div);
+        }
+
+        function removeService(button) {
+            button.parentElement.remove();
+        }
+
         // Create Pod 비동기 요청
         async function createPod(event) {
             event.preventDefault(); // 폼 제출로 인한 페이지 리로드 방지
 
             const formData = new FormData(document.getElementById("podForm"));
+
+            if (document.getElementById("create_service").checked) {
+                const serviceList = [];
+                document.querySelectorAll("#service_list fieldset").forEach((fieldset, index) => {
+                    const serviceType = fieldset.querySelector(`select[name="service_type_${index}"]`).value;
+                    const targetPort = parseInt(fieldset.querySelector(`input[name="target_port_${index}"]`).value);
+                    const servicePort = parseInt(fieldset.querySelector(`input[name="service_port_${index}"]`).value);
+                    serviceList.push({ type: serviceType, target_port: targetPort, service_port: servicePort });
+                });
+
+                formData.append("service_settings", JSON.stringify(serviceList));
+            }
+
             const response = await fetch("/create_pod", {
                 method: "POST",
                 body: formData,
@@ -173,19 +221,14 @@
 
         <!-- 서비스 생성 여부 체크박스 -->
         <label for="create_service">Create Service:</label>
-        <input type="checkbox" id="create_service" name="create_service" onclick="toggleServicePortInput()"><br><br>
+        <input type="checkbox" id="create_service" name="create_service" onclick="toggleServiceSettings()"><br><br>
 
-        <label for="service_type">Service Type:</label>
-        <select id="service_type" name="service_type">
-            <option value="NodePort">NodePort</option>
-            <option value="ClusterIP">ClusterIP</option>
-            <option value="LoadBalancer" disabled>LoadBalancer</option>
-            <option value="ExternalName" disabled>ExternalName</option>
-        </select><br><br>
-
-        <!-- 서비스 포트 입력 필드 -->
-        <label for="service_port">Service Port:</label>
-        <input type="number" id="service_port" name="service_port" value="80"><br><br>
+        <!-- 서비스 설정 추가 버튼 -->
+        <div id="service_settings" style="display: none;">
+            <label>Service Settings:</label>
+            <div id="service_list"></div>
+            <button type="button" onclick="addService()">Add Service</button>
+        </div>
 
         <button type="submit">Create Pod</button>
     </form>

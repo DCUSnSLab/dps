@@ -96,7 +96,7 @@ class KubernetesManager:
             print(f"Failed to retrieve GPU information: {e}")
             return []
 
-    def create_pod(self, pod_name, namespace, image, cpu_request, memory_request, volume_size, use_gpu, create_service, service_type, serviceport):
+    def create_pod(self, pod_name, namespace, image, cpu_request, memory_request, volume_size, use_gpu, service_settings=None):
         pod_name = pod_name.replace("_", "-")
         metadata = client.V1ObjectMeta(name=pod_name)
 
@@ -116,30 +116,31 @@ class KubernetesManager:
 
         try:
             self.v1.create_namespaced_pod(namespace=namespace, body=pod)
-            if create_service:
-                self.create_service(pod_name, namespace, service_type, serviceport)
+            if service_settings:
+                for service in service_settings:
+                    self.create_service(pod_name, namespace, service)
             return f"Pod '{pod_name}' created successfully in namespace '{namespace}'."
         except ApiException as e:
             return f"Failed to create Pod: {e}"
 
-    def create_service(self, pod_name, namespace, service_type, serviceport):
-        service_metadata = client.V1ObjectMeta(name=pod_name)
+    def create_service(self, pod_name, namespace, service_settings):
+        service_metadata = client.V1ObjectMeta(name=f"{pod_name}-{service_settings['target_port']}")
 
-        #print(serviceport)
-        #print(type(serviceport))
-
-        # if service_type == "NodePort":
+        service_type = service_settings.get("type", "ClusterIP")
+        target_port = service_settings.get("target_port", 80)
+        service_port = service_settings.get("service_port", 0 if service_type == "NodePort" else target_port)
 
         spec = client.V1ServiceSpec(
             selector={"name": pod_name},
-            ports=[client.V1ServicePort(protocol="TCP", port=80, target_port=int(serviceport), node_port=0)],
-            type=service_type
+            type=service_type,
+            ports=[client.V1ServicePort(protocol="TCP", port=service_port, target_port=target_port,
+                                        node_port=0 if service_type == "NodePort" else None)]
         )
 
         service = client.V1Service(api_version="v1", kind="Service", metadata=service_metadata, spec=spec)
         try:
             self.v1.create_namespaced_service(namespace=namespace, body=service)
-            return f"Service '{pod_name}' created successfully."
+            return f"Service '{pod_name}-{service_settings['target_port']}' created successfully with type '{service_type}'."
         except ApiException as e:
             return f"Failed to create Service: {e}"
 
@@ -148,11 +149,11 @@ class KubernetesManager:
             self.v1.delete_namespaced_pod(name=pod_name, namespace=namespace)
             services = self.v1.list_namespaced_service(namespace=namespace)
             for service in services.items:
-                if service.metadata.name == pod_name:
-                    self.v1.delete_namespaced_service(name=pod_name, namespace=namespace)
+                if service.metadata.name.startswith(pod_name):
+                    self.v1.delete_namespaced_service(name=service.metadata.name, namespace=namespace)
             return f"Pod '{pod_name}' and its associated services deleted successfully."
         except ApiException as e:
-            return f"Failed to delete Pod: {e}"
+            return f"Failed to delete Pod or its services: {e}"
 
 
 class FlaskApp:
@@ -186,8 +187,7 @@ class FlaskApp:
         @self.app.route("/create_pod", methods=["POST"])
         def create_pod_route():
             data = request.form
-            create_service = "create_service" in data  # 체크박스가 체크되었는지 확인
-            service_port = data.get("service_port", 80)  # 기본값 80 설정
+            service_settings = json.loads(data.get("service_settings", "[]")) if "service_settings" in data else []
 
             message = self.k8s_manager.create_pod(
                 data.get("pod_name"),
@@ -197,9 +197,7 @@ class FlaskApp:
                 data.get("memory_request"),
                 data.get("volume_size"),
                 data.get("use_gpu") == "on",
-                create_service,
-                data.get("service_type"),
-                service_port
+                service_settings=service_settings
             )
 
             return jsonify({"message": message})
