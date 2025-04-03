@@ -12,6 +12,18 @@
             gpuDropdown.disabled = !useGpuCheckbox.checked;
         }
 
+        // PVC 체크박스 상태에 따라 드롭다운 활성화/비활성화
+        function togglePvcDropdown() {
+            const usePvcCheckbox = document.getElementById("use_pvc");
+            const pvcDropdown = document.getElementById("pvc_selection");
+            pvcDropdown.disabled = !usePvcCheckbox.checked;
+            
+            // PVC 체크박스가 체크되면 PVC 목록 업데이트
+            if (usePvcCheckbox.checked) {
+                updatePvcList();
+            }
+        }
+
         function toggleServiceSettings() {
             document.getElementById("service_settings").style.display = document.getElementById("create_service").checked ? "block" : "none";
         }
@@ -47,6 +59,36 @@
             button.parentElement.remove();
         }
 
+        // PVC 목록 업데이트
+        async function updatePvcList() {
+            const namespace = document.getElementById("namespace").value;
+            
+            try {
+                const response = await fetch(`/get_pvcs/${namespace}`);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch PVC list: ${response.status}`);
+                }
+
+                const pvcs = await response.json();
+                const pvcDropdown = document.getElementById("pvc_selection");
+                
+                // 드롭다운 메뉴 초기화
+                pvcDropdown.innerHTML = "";
+                pvcDropdown.innerHTML = "<option value=''>-- Select PVC --</option>";
+
+                // PVC 목록 업데이트
+                pvcs.forEach((pvc) => {
+                    const option = document.createElement("option");
+                    option.value = pvc.name;
+                    option.textContent = `${pvc.name} (${pvc.capacity}, ${pvc.status})`;
+                    pvcDropdown.appendChild(option);
+                });
+            } catch (error) {
+                console.error("Error updating PVC list:", error);
+                alert("Failed to update PVC list. Please check the console for more details.");
+            }
+        }
+
         // 입력값 검증 함수
         function validateResourceInput() {
             const cpuInput = document.getElementById("cpu_request").value;
@@ -71,6 +113,15 @@
             const volumeRegex = /^\d+(\.\d+)?(Mi|Gi)$/;
             if (!volumeRegex.test(volumeInput)) {
                 alert("볼륨 크기 형식이 올바르지 않습니다. 예시: 1Gi, 5Gi, 10Gi");
+                return false;
+            }
+            
+            // PVC 사용 체크박스가 체크되어 있지만 PVC가 선택되지 않은 경우
+            const usePvcCheckbox = document.getElementById("use_pvc");
+            const pvcSelection = document.getElementById("pvc_selection");
+            
+            if (usePvcCheckbox.checked && !pvcSelection.value) {
+                alert("PVC를 선택해주세요.");
                 return false;
             }
             
@@ -113,7 +164,7 @@
         }
 
         async function updatePodList() {
-	    console.log("updatePodList()");
+            console.log("updatePodList()");
             const namespace = document.getElementById("namespace").value;
 
             try {
@@ -163,12 +214,12 @@
         }
 
         async function updateImageDropdowns() {
-	    console.log("updateImageDropdowns()");
+            console.log("updateImageDropdowns()");
             try {
                 const response = await fetch("/get_images");
                 const imageData = await response.json();
 
-		console.log(imageData);
+                console.log(imageData);
 
                 const imageDropdown = document.getElementById("images");
 
@@ -188,15 +239,19 @@
             }
         }
 
-	window.onload = function () {
-            // 페이지 로드 시 이미지 목록 초기화
-            // 페이지 로드 시 Pod 목록 초기화
-	    updatePodList();
-	    updateImageDropdowns();
-	};
-
-
-	console.log("Test");
+        window.onload = function () {
+            // 페이지 로드 시 초기화
+            updatePodList();
+            updateImageDropdowns();
+            
+            // 네임스페이스 변경 시 PVC 목록도 업데이트하도록 이벤트 리스너 설정
+            document.getElementById("namespace").addEventListener("change", function() {
+                updatePodList();
+                if (document.getElementById("use_pvc").checked) {
+                    updatePvcList();
+                }
+            });
+        };
     </script>
 </head>
 <body>
@@ -209,7 +264,7 @@
         <input type="text" id="pod_name" name="pod_name" required><br><br>
 
         <label for="namespace">Namespace:</label>
-        <select id="namespace" name="namespace" onchange="updatePodList()">
+        <select id="namespace" name="namespace">
             {% for ns in namespaces %}
                 <option value="{{ ns }}" {% if ns == 'k8s-api-junehong' %}selected{% endif %}>{{ ns }}</option>
             {% endfor %}
@@ -226,6 +281,16 @@
 
         <label for="volume_size">Volume Size (e.g., 1Gi, 5Gi, 10Gi):</label>
         <input type="text" id="volume_size" name="volume_size" placeholder="1Gi" value="1Gi"><br><br>
+
+        <!-- PVC 사용 여부 체크박스 -->
+        <label for="use_pvc">Use Existing PVC:</label>
+        <input type="checkbox" id="use_pvc" name="use_pvc" onclick="togglePvcDropdown()"><br><br>
+
+        <!-- PVC 선택 드롭다운 -->
+        <label for="pvc_selection">Select PVC:</label>
+        <select id="pvc_selection" name="pvc_name" disabled>
+            <option value="">-- Select PVC --</option>
+        </select><br><br>
 
         <!-- GPU 사용 여부 체크박스 -->
         <label for="use_gpu">Use GPU:</label>
@@ -249,7 +314,7 @@
             <label>Service Settings:</label>
             <div id="service_list"></div>
             <button type="button" onclick="addService()">Add Service</button>
-        </div>
+        </div><br>
 
         <button type="submit">Create Pod</button>
     </form>
@@ -258,4 +323,3 @@
     <ul id="pod-list"></ul>
 </body>
 </html>
-

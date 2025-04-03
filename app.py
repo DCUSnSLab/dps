@@ -96,6 +96,23 @@ class KubernetesManager:
             print(f"Failed to retrieve GPU information: {e}")
             return []
 
+    def get_pvcs(self, namespace):
+        try:
+            pvcs = self.v1.list_namespaced_persistent_volume_claim(namespace=namespace)
+            pvc_list = []
+            for pvc in pvcs.items:
+                pvc_list.append({
+                    "name": pvc.metadata.name,
+                    "status": pvc.status.phase,
+                    "capacity": pvc.status.capacity.get("storage", "Unknown"),
+                    "access_modes": pvc.spec.access_modes,
+                    "storage_class": pvc.spec.storage_class_name or "default"
+                })
+            return pvc_list
+        except ApiException as e:
+            print(f"Failed to list PVCs in namespace '{namespace}': {e}")
+            return []
+
     def validate_resource_value(self, value, resource_type):
         # CPU 값 검증 (100m, 0.5, 1 등)
         if resource_type == "cpu":
@@ -144,7 +161,7 @@ class KubernetesManager:
         
         return value
 
-    def create_pod(self, pod_name, namespace, image, cpu_request, memory_request, volume_size, use_gpu, service_settings=None):
+    def create_pod(self, pod_name, namespace, image, cpu_request, memory_request, volume_size, use_gpu, use_pvc=None, pvc_name=None, service_settings=None):
         pod_name = pod_name.replace("_", "-")
         metadata = client.V1ObjectMeta(name=pod_name)
 
@@ -164,10 +181,28 @@ class KubernetesManager:
             name=pod_name, image=image, ports=[client.V1ContainerPort(container_port=80)], resources=resources,
             command=["/bin/bash", "-c", "while true; do sleep 30; done"]
         )
-        container = client.V1Container(
-            name=pod_name, image=image, ports=[client.V1ContainerPort(container_port=80)], resources=resources
-        )
-        spec = client.V1PodSpec(containers=[container])
+
+        volumes = []
+        volume_mounts = []
+
+        # PVC 사용 설정
+        if use_pvc and pvc_name:
+            volume_name = f"{pod_name}-storage"
+            volumes.append(
+                client.V1Volume(
+                    name=volume_name,
+                    persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(claim_name=pvc_name)
+                )
+            )
+            volume_mounts.append(
+                client.V1VolumeMount(
+                    name=volume_name,
+                    mount_path="/data"
+                )
+            )
+            container.volume_mounts = volume_mounts
+
+        spec = client.V1PodSpec(containers=[container], volumes=volumes)
         pod = client.V1Pod(api_version="v1", kind="Pod", metadata=metadata, spec=spec)
 
         try:
@@ -235,6 +270,11 @@ class FlaskApp:
             images = self.k8s_manager.get_image_list()
             return jsonify(images)
 
+        @self.app.route("/get_pvcs/<namespace>")
+        def get_pvcs_route(namespace):
+            pvcs = self.k8s_manager.get_pvcs(namespace)
+            return jsonify(pvcs)
+
         @self.app.route("/delete_pod/<namespace>/<pod_name>", methods=["POST"])
         def delete_pod_route(namespace, pod_name):
             message = self.k8s_manager.delete_pod(namespace, pod_name)
@@ -253,6 +293,8 @@ class FlaskApp:
                 data.get("memory_request"),
                 data.get("volume_size"),
                 data.get("use_gpu") == "on",
+                data.get("use_pvc") == "on",
+                data.get("pvc_name"),
                 service_settings=service_settings
             )
 
