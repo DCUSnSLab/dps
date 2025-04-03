@@ -47,9 +47,44 @@
             button.parentElement.remove();
         }
 
+        // 입력값 검증 함수
+        function validateResourceInput() {
+            const cpuInput = document.getElementById("cpu_request").value;
+            const memoryInput = document.getElementById("memory_request").value;
+            const volumeInput = document.getElementById("volume_size").value;
+            
+            // CPU 검증 (100m, 0.5, 1 등)
+            const cpuRegex = /^(\d+m|\d+(\.\d+)?)$/;
+            if (!cpuRegex.test(cpuInput)) {
+                alert("CPU 요청 형식이 올바르지 않습니다. 예시: 100m, 0.5, 1");
+                return false;
+            }
+            
+            // 메모리 검증 (128Mi, 1Gi 등)
+            const memoryRegex = /^\d+(\.\d+)?(Mi|Gi|Ki)$/;
+            if (!memoryRegex.test(memoryInput)) {
+                alert("메모리 요청 형식이 올바르지 않습니다. 예시: 128Mi, 512Mi, 1Gi");
+                return false;
+            }
+            
+            // 볼륨 검증 (1Gi, 5Gi 등)
+            const volumeRegex = /^\d+(\.\d+)?(Mi|Gi)$/;
+            if (!volumeRegex.test(volumeInput)) {
+                alert("볼륨 크기 형식이 올바르지 않습니다. 예시: 1Gi, 5Gi, 10Gi");
+                return false;
+            }
+            
+            return true;
+        }
+
         // Create Pod 비동기 요청
         async function createPod(event) {
             event.preventDefault(); // 폼 제출로 인한 페이지 리로드 방지
+            
+            // 입력값 검증
+            if (!validateResourceInput()) {
+                return;
+            }
 
             const formData = new FormData(document.getElementById("podForm"));
 
@@ -183,28 +218,14 @@
         <label for="images">Select Image:</label>
         <select id="images" name="image"></select><br><br>
 
-        <label for="cpu_request">CPU Request:</label>
-        <select id="cpu_request" name="cpu_request">
-            <option value="100m">100m</option>
-            <option value="200m">200m</option>
-            <option value="500m">500m</option>
-            <option value="1">1</option>
-        </select><br><br>
+        <label for="cpu_request">CPU Request (e.g., 100m, 0.5, 1):</label>
+        <input type="text" id="cpu_request" name="cpu_request" placeholder="100m" value="100m"><br><br>
 
-        <label for="memory_request">Memory Request:</label>
-        <select id="memory_request" name="memory_request">
-            <option value="128Mi">128Mi</option>
-            <option value="256Mi">256Mi</option>
-            <option value="512Mi">512Mi</option>
-            <option value="1Gi">1Gi</option>
-        </select><br><br>
+        <label for="memory_request">Memory Request (e.g., 128Mi, 512Mi, 1Gi):</label>
+        <input type="text" id="memory_request" name="memory_request" placeholder="128Mi" value="128Mi"><br><br>
 
-        <label for="volume_size">Volume Size:</label>
-        <select id="volume_size" name="volume_size">
-            <option value="1Gi">1Gi</option>
-            <option value="2Gi">2Gi</option>
-            <option value="5Gi">5Gi</option>
-        </select><br><br>
+        <label for="volume_size">Volume Size (e.g., 1Gi, 5Gi, 10Gi):</label>
+        <input type="text" id="volume_size" name="volume_size" placeholder="1Gi" value="1Gi"><br><br>
 
         <!-- GPU 사용 여부 체크박스 -->
         <label for="use_gpu">Use GPU:</label>

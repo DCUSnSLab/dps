@@ -96,9 +96,62 @@ class KubernetesManager:
             print(f"Failed to retrieve GPU information: {e}")
             return []
 
+    def validate_resource_value(self, value, resource_type):
+        # CPU 값 검증 (100m, 0.5, 1 등)
+        if resource_type == "cpu":
+            if value.endswith("m"):
+                try:
+                    cpu_value = int(value[:-1])
+                    if cpu_value <= 0:
+                        return "100m"  # 기본값
+                    return value
+                except ValueError:
+                    return "100m"  # 기본값
+            else:
+                try:
+                    cpu_value = float(value)
+                    if cpu_value <= 0:
+                        return "100m"  # 기본값
+                    return value
+                except ValueError:
+                    return "100m"  # 기본값
+        
+        # 메모리 값 검증 (128Mi, 1Gi 등)
+        elif resource_type == "memory":
+            if value.endswith("Gi") or value.endswith("Mi") or value.endswith("Ki"):
+                try:
+                    size = float(value[:-2])
+                    if size <= 0:
+                        return "128Mi"  # 기본값
+                    return value
+                except ValueError:
+                    return "128Mi"  # 기본값
+            else:
+                return "128Mi"  # 기본값
+        
+        # 볼륨 크기 검증 (1Gi, 5Gi 등)
+        elif resource_type == "volume":
+            if value.endswith("Gi") or value.endswith("Mi"):
+                try:
+                    size = float(value[:-2])
+                    if size <= 0:
+                        return "1Gi"  # 기본값
+                    return value
+                except ValueError:
+                    return "1Gi"  # 기본값
+            else:
+                return "1Gi"  # 기본값
+        
+        return value
+
     def create_pod(self, pod_name, namespace, image, cpu_request, memory_request, volume_size, use_gpu, service_settings=None):
         pod_name = pod_name.replace("_", "-")
         metadata = client.V1ObjectMeta(name=pod_name)
+
+        # 리소스 값 검증
+        cpu_request = self.validate_resource_value(cpu_request, "cpu")
+        memory_request = self.validate_resource_value(memory_request, "memory")
+        volume_size = self.validate_resource_value(volume_size, "volume")
 
         resource_requests = {"cpu": cpu_request, "memory": memory_request}
         resource_limits = {"cpu": cpu_request, "memory": memory_request}
