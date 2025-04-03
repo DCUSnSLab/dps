@@ -111,6 +111,9 @@ class KubernetesManager:
             name=pod_name, image=image, ports=[client.V1ContainerPort(container_port=80)], resources=resources,
             command=["/bin/bash", "-c", "while true; do sleep 30; done"]
         )
+        container = client.V1Container(
+            name=pod_name, image=image, ports=[client.V1ContainerPort(container_port=80)], resources=resources
+        )
         spec = client.V1PodSpec(containers=[container])
         pod = client.V1Pod(api_version="v1", kind="Pod", metadata=metadata, spec=spec)
 
